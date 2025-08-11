@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 
-
 export default function BuyPage() {
   const AMOUNT = process.env.NEXT_PUBLIC_AMOUNT || 50;
 
