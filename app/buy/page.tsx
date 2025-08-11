@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 
-const AMOUNT = process.env.NEXT_PUBLIC_AMOUNT;
 
 export default function BuyPage() {
+  const AMOUNT = process.env.NEXT_PUBLIC_AMOUNT || 50;
+
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("+91 ");
