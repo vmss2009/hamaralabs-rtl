@@ -1,7 +1,7 @@
 import { cert, getApps, initializeApp, type ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
-const saJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+const saJson = process.env.SERVICE_ACCOUNT_KEY;
 if (!saJson) {
   throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not set");
 }
