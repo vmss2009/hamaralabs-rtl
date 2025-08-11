@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-const AMOUNT = 1; // ₹
+const AMOUNT = 1;
 
 export default function BuyPage() {
   const [open, setOpen] = useState(false);
@@ -10,12 +10,10 @@ export default function BuyPage() {
   const [phone, setPhone] = useState("+91 ");
   const [submitting, setSubmitting] = useState(false);
 
-  // envs
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   const paymentPortal = process.env.NEXT_PUBLIC_PAYMENT_PORTAL;
   const merchantId = "${merchantId}";
 
-  // ids
   const merchantTransactionId = useMemo(() => `MT${Date.now()}`, []);
   const merchantUserId = useMemo(() => `MUI${Date.now()}`, []);
   const docId = useMemo(() => `BOOK${Date.now()}`, []);
@@ -39,7 +37,6 @@ export default function BuyPage() {
 
     setSubmitting(true);
 
-    // Persist as a fallback in case the gateway strips query params
     if (typeof window !== "undefined") {
       sessionStorage.setItem(
         "bookingPayload",
@@ -54,7 +51,6 @@ export default function BuyPage() {
       );
     }
 
-    // redirect url back to your site with all info we need to verify + save
     const redirectUrl =
       `${siteUrl}/payments?amount=${AMOUNT}` +
       `&docId=${encodeURIComponent(docId)}` +
@@ -63,7 +59,6 @@ export default function BuyPage() {
       `&email=${encodeURIComponent(email)}` +
       `&phone=${encodeURIComponent(phone)}`;
 
-    // your gateway checkout
     const checkoutUrl =
       `${paymentPortal}/payment/checkout` +
       `?amount=${AMOUNT}` +
@@ -111,7 +106,6 @@ export default function BuyPage() {
         </ul>
       </div>
 
-      {/* Popup (email optional, phone required) */}
       {open && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-[var(--foreground)]/10 bg-[var(--background)] p-6 shadow-xl">

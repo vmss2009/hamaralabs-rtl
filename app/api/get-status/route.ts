@@ -27,10 +27,7 @@ export async function POST(req: Request) {
     });
 
     const data = await upstream.json().catch(() => ({}));
-    return NextResponse.json(data, {
-      status: upstream.status,
-      headers: { "Cache-Control": "no-store" },
-    });
+    return NextResponse.json(data);
   } catch (err) {
     console.error("getStatus route error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

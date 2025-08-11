@@ -1,15 +1,17 @@
-// lib/firebase.ts
-import { initializeApp, getApps } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { cert, getApps, initializeApp, type ServiceAccount } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
-};
+const saJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+if (!saJson) {
+  throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is not set");
+}
 
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+const serviceAccount = JSON.parse(saJson) as ServiceAccount;
+
+export const adminApp =
+  getApps()[0] ??
+  initializeApp({
+    credential: cert(serviceAccount),
+  });
+
+export const adminDb = getFirestore(adminApp);
