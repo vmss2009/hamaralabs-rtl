@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-const AMOUNT = 1;
+const AMOUNT = process.env.NEXT_PUBLIC_AMOUNT;
 
 export default function BuyPage() {
   const [open, setOpen] = useState(false);
