@@ -45,6 +45,7 @@ export default function PaymentsReturnPage() {
 
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
 
   useEffect(() => {
     const fromQuery = {
@@ -70,6 +71,10 @@ export default function PaymentsReturnPage() {
     setMerchantTransactionId(
       fromQuery.merchantTransactionId ?? fromSession.merchantTransactionId ?? ""
     );
+
+    if (fromSession.selectedSlot) {
+      setSelectedSlot(fromSession.selectedSlot);
+    }
   }, [qp]);
 
   useEffect(() => {
@@ -89,41 +94,73 @@ export default function PaymentsReturnPage() {
 
       setStatus("checking");
       try {
-        const res = await fetch(
-          `/api/get-status`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ merchantTransactionId, merchantId }),
-          }
-        );
+        const res = await fetch(`/api/get-status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ merchantTransactionId, merchantId }),
+        });
         const json = await res.json();
         const code = json?.data?.code;
 
         if (code === "PAYMENT_SUCCESS") {
-          const createRes = await fetch("/api/bookings/create", {
+          // 1) Create Slot on backend
+          const slotPayload = {
+            merchantTransactionId,
+            merchantId,
+            email,
+            phone,
+            amount: Number(amount),
+            status: "PAID",
+            items: [
+              {
+                description: "Remote Lab Booking",
+                quantity: 1,
+                price: Number(amount),
+                total: Number(amount),
+              },
+            ],
+            paidBy: email || phone,
+            paymentMethod: json?.data?.paymentMethod || undefined,
+            notes: `Booking for ${email || phone}`,
+          } as any;
+
+          const slotRes = await fetch("/api/slots", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(slotPayload),
+          });
+          if (!slotRes.ok) {
+            const err = await slotRes.json().catch(() => ({}));
+            throw new Error(err?.message || `Failed to create slot (${slotRes.status})`);
+          }
+          const slotJson = await slotRes.json();
+          const slotId = slotJson?.slot?.id || slotJson?.id || slotJson?.slotId;
+          if (!slotId) throw new Error("Slot creation succeeded but no slotId returned.");
+
+          // 2) Create Booking that attaches to the Slot
+          const username = "demouser672"; // backend’s public username you shared
+          const dateIso = selectedSlot?.date || new Date().toISOString();
+          const date = dateIso.split("T")[0];
+          const timeSlot = selectedSlot?.time || "";
+          if (!timeSlot) throw new Error("Missing selected time slot.");
+
+          const bookingRes = await fetch("/api/bookings", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              merchantTransactionId,
-              merchantId,
-              email,
-              phone,
-              amount: Number(amount),
-              status: "success",
+              username,
+              date,
+              timeSlot,
+              guestName: email || phone,
+              guestEmail: email || undefined,
+              notes: `Auto-created after payment: ${merchantTransactionId}`,
+              slotId,
             }),
           });
-
-          if (!createRes.ok) {
-            if (createRes.status === 409) {
-              setStatus("failed");
-              setMessage("Record associated with the same transaction ID already exists.");
-            } else {
-              const err = await createRes.json().catch(() => ({}));
-              setStatus("failed");
-              setMessage(err?.error || "Could not create booking.");
-            }
-            return;
+          if (!bookingRes.ok) {
+            const err = await bookingRes.json().catch(() => ({}));
+            throw new Error(err?.message || `Failed to create booking (${bookingRes.status})`);
           }
 
           setStatus("success");
@@ -137,7 +174,7 @@ export default function PaymentsReturnPage() {
             paymentMethod: json?.data?.paymentMethod,
             items: [
               {
-                description: "Remote Lab Booking",
+                description: `Remote Lab Booking (${date} ${timeSlot})`,
                 quantity: 1,
                 price: Number(amount),
                 total: Number(amount),

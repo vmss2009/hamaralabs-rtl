@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase";
 
 export async function POST(req: Request) {
   try {
@@ -33,33 +32,33 @@ export async function POST(req: Request) {
     }
 
     const id = String(merchantTransactionId);
-    const ref = adminDb.collection("remoteLabsBookings").doc(id);
+    // const ref = adminDb.collection("remoteLabsBookings").doc(id);
 
-    const result = await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (snap.exists) {
-        return { created: false };
-      }
-      tx.create(ref, {
-        merchantTransactionId: id,
-        merchantId: String(merchantId),
-        email: String(email || ""),
-        phone: String(phone),
-        amount: Number(amount),
-        status: String(status),
-        items: Array.isArray(items) ? items : [],
-        paidBy: paidBy ?? "",
-        paymentMethod: paymentMethod ?? "",
-        notes: notes ?? "",
+    // const result = await adminDb.runTransaction(async (tx) => {
+    //   const snap = await tx.get(ref);
+    //   if (snap.exists) {
+    //     return { created: false };
+    //   }
+    //   tx.create(ref, {
+    //     merchantTransactionId: id,
+    //     merchantId: String(merchantId),
+    //     email: String(email || ""),
+    //     phone: String(phone),
+    //     amount: Number(amount),
+    //     status: String(status),
+    //     items: Array.isArray(items) ? items : [],
+    //     paidBy: paidBy ?? "",
+    //     paymentMethod: paymentMethod ?? "",
+    //     notes: notes ?? "",
 
-      });
-      await fetch(`${base}/phoneCall/call`);
-      return { created: true };
-    });
+    //   });
+    //   return { created: true };
+    // });
+
 
     return NextResponse.json(
-      { ok: true, id, created: result.created },
-      { status: result.created ? 201 : 200 }
+      { ok: true, id, created: false },
+      { status: 200 }
     );
   } catch (err) {
     console.error("Create booking error:", err);
