@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 
 export default function BuyPage() {
   const AMOUNT = process.env.NEXT_PUBLIC_AMOUNT || 50;
-    const pathname = useRouter();
 
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -28,19 +27,15 @@ export default function BuyPage() {
     time: string; // "HH:mm-HH:mm"
   } | null>(null);
 
-  const [siteUrl, setSiteUrl] = useState<string | null>(null);
   const paymentPortal = process.env.NEXT_PUBLIC_PAYMENT_PORTAL || "https://hamaralabs.com";
   const merchantId = "${merchantId}";
+  const siteUrl = "https://rtl.hamaralabs.com";
 
   const merchantTransactionId = useMemo(() => `MT${Date.now()}`, []);
   const merchantUserId = useMemo(() => `MUI${Date.now()}`, []);
   const docId = useMemo(() => `BOOK${Date.now()}`, []);
 
   const onBuyClick = () => setOpen(true);
-  
-  useEffect(() => {
-    setSiteUrl(window.location.href || process.env.NEXT_PUBLIC_SITE_URL!);
-  }, []);
 
   // Fetch schedules when the popup opens
   useEffect(() => {
