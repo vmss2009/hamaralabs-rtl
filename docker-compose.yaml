@@ -1,0 +1,31 @@
+networks:
+  hamaralabs-rtl-net:
+
+volumes:
+  db-data:
+
+services:
+  hamaralabs-rtl-db:
+    container_name: hamaralabs-rtl-db
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: hamaralabs
+      POSTGRES_PASSWORD: hamaralabs
+      POSTGRES_DB: hamaralabs
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - hamaralabs-rtl-net
+
+  hamaralabs-rtl:
+    container_name: hamaralabs-rtl
+    image: ghcr.io/vmss2009/hamaralabs-rtl:v6
+    depends_on:
+      - hamaralabs-rtl-db
+    ports:
+      - "3006:3000"
+    env_file:
+      - .env
+    networks:
+      - hamaralabs-rtl-net
