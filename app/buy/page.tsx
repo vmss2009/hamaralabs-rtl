@@ -45,7 +45,7 @@ export default function BuyPage() {
       setSlotsError(null);
       try {
         const res = await fetch(
-          "http://192.168.0.100:3005/api/schedules/public/demouser672",
+          `http://192.168.0.100:3005/api/schedules/public/${process.env.NEXT_PUBLIC_CALENDAR_USER}`,
           { cache: "no-store" }
         );
         if (!res.ok) throw new Error(`Failed to load slots (${res.status})`);

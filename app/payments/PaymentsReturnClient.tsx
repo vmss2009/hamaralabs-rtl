@@ -103,6 +103,9 @@ export default function PaymentsReturnPage() {
         const code = json?.data?.code;
 
         if (code === "PAYMENT_SUCCESS") {
+          // Prepare a single notes value to be used for both slot and booking
+          const unifiedNotes = `Booking for ${email || phone}`;
+
           // 1) Create Slot on backend
           const slotPayload = {
             merchantTransactionId,
@@ -121,7 +124,7 @@ export default function PaymentsReturnPage() {
             ],
             paidBy: email || phone,
             paymentMethod: json?.data?.paymentMethod || undefined,
-            notes: `Booking for ${email || phone}`,
+            notes: unifiedNotes,
           } as any;
 
           const slotRes = await fetch("/api/slots", {
@@ -131,15 +134,72 @@ export default function PaymentsReturnPage() {
             body: JSON.stringify(slotPayload),
           });
           if (!slotRes.ok) {
+            // If slot already exists for this merchantTransactionId, treat as success and skip creating booking.
+            if (slotRes.status === 409) {
+              setStatus("success");
+              setMessage("Payment successful! Your slot was already processed.");
+              const now = new Date();
+              const timeSlot = selectedSlot?.time || "";
+              const dateIso = selectedSlot?.date || new Date().toISOString();
+              const date = dateIso.split("T")[0];
+              setReceiptData({
+                date: now.toLocaleString(),
+                merchantTransactionId,
+                paidBy: email || phone,
+                paymentMethod: json?.data?.paymentMethod,
+                items: [
+                  {
+                    description: `Remote Lab Booking (${date} ${timeSlot})`,
+                    quantity: 1,
+                    price: Number(amount),
+                    total: Number(amount),
+                  },
+                ],
+                amount: Number(amount),
+                notes: "Thank you for your payment.",
+              });
+              return; // Do not create booking again
+            }
             const err = await slotRes.json().catch(() => ({}));
             throw new Error(err?.message || `Failed to create slot (${slotRes.status})`);
           }
           const slotJson = await slotRes.json();
           const slotId = slotJson?.slot?.id || slotJson?.id || slotJson?.slotId;
-          if (!slotId) throw new Error("Slot creation succeeded but no slotId returned.");
+          if (!slotId) {
+            // If backend signals already exists in body, treat as success and skip booking
+            const alreadyExists =
+              String(slotJson?.message || "").toLowerCase().includes("exist") ||
+              slotJson?.alreadyExists === true;
+            if (alreadyExists) {
+              setStatus("success");
+              setMessage("Payment successful! Your slot was already processed.");
+              const now = new Date();
+              const timeSlot = selectedSlot?.time || "";
+              const dateIso = selectedSlot?.date || new Date().toISOString();
+              const date = dateIso.split("T")[0];
+              setReceiptData({
+                date: now.toLocaleString(),
+                merchantTransactionId,
+                paidBy: email || phone,
+                paymentMethod: json?.data?.paymentMethod,
+                items: [
+                  {
+                    description: `Remote Lab Booking (${date} ${timeSlot})`,
+                    quantity: 1,
+                    price: Number(amount),
+                    total: Number(amount),
+                  },
+                ],
+                amount: Number(amount),
+                notes: "Thank you for your payment.",
+              });
+              return; // Do not create booking again
+            }
+            throw new Error("Slot creation succeeded but no slotId returned.");
+          }
 
           // 2) Create Booking that attaches to the Slot
-          const username = "demouser672"; // backend’s public username you shared
+          const username = process.env.NEXT_PUBLIC_CALENDAR_USER; // backend’s public username you shared
           const dateIso = selectedSlot?.date || new Date().toISOString();
           const date = dateIso.split("T")[0];
           const timeSlot = selectedSlot?.time || "";
@@ -152,9 +212,9 @@ export default function PaymentsReturnPage() {
               username,
               date,
               timeSlot,
-              guestName: email || phone,
-              guestEmail: email || undefined,
-              notes: `Auto-created after payment: ${merchantTransactionId}`,
+              guestName: email || "",
+              guestEmail: phone || "",
+              notes: unifiedNotes,
               slotId,
             }),
           });
