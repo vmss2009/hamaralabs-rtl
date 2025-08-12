@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
+import { useRouter } from 'next/navigation'
 
 export default function BuyPage() {
   const AMOUNT = process.env.NEXT_PUBLIC_AMOUNT || 50;
+    const pathname = useRouter();
 
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -26,8 +28,8 @@ export default function BuyPage() {
     time: string; // "HH:mm-HH:mm"
   } | null>(null);
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  const paymentPortal = process.env.NEXT_PUBLIC_PAYMENT_PORTAL;
+  const [siteUrl, setSiteUrl] = useState<string | null>(null);
+  const paymentPortal = process.env.NEXT_PUBLIC_PAYMENT_PORTAL || "https://hamaralabs.com";
   const merchantId = "${merchantId}";
 
   const merchantTransactionId = useMemo(() => `MT${Date.now()}`, []);
@@ -35,6 +37,10 @@ export default function BuyPage() {
   const docId = useMemo(() => `BOOK${Date.now()}`, []);
 
   const onBuyClick = () => setOpen(true);
+  
+  useEffect(() => {
+    setSiteUrl(window.location.href || process.env.NEXT_PUBLIC_SITE_URL!);
+  }, []);
 
   // Fetch schedules when the popup opens
   useEffect(() => {
