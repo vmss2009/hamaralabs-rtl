@@ -199,7 +199,7 @@ export default function PaymentsReturnPage() {
           }
 
           // 2) Create Booking that attaches to the Slot
-          const username = process.env.NEXT_PUBLIC_CALENDAR_USER; // backend’s public username you shared
+          const username = process.env.NEXT_PUBLIC_CALENDAR_USER || "mohan487"; // backend’s public username you shared
           const dateIso = selectedSlot?.date || new Date().toISOString();
           const date = dateIso.split("T")[0];
           const timeSlot = selectedSlot?.time || "";

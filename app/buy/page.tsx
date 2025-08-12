@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from 'next/navigation'
 
 export default function BuyPage() {
@@ -51,7 +51,7 @@ export default function BuyPage() {
       setSlotsError(null);
       try {
         const res = await fetch(
-          `http://192.168.0.100:3005/api/schedules/public/${process.env.NEXT_PUBLIC_CALENDAR_USER}`,
+          `http://192.168.0.100:3005/api/schedules/public/${process.env.NEXT_PUBLIC_CALENDAR_USER || "mohan487"}`,
           { cache: "no-store" }
         );
         if (!res.ok) throw new Error(`Failed to load slots (${res.status})`);
