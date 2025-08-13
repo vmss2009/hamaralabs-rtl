@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from 'next/navigation'
 
 export default function BuyPage() {
   const AMOUNT = process.env.NEXT_PUBLIC_AMOUNT || 50;
