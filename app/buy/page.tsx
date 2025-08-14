@@ -229,7 +229,10 @@ export default function BuyPage() {
               </button>
             </div>
 
-            <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
+            <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800">
+              After successful payment, you will immediately get phoned from <b>+91 9989875423</b> for confirmation, and an email will be sent from <b>support@hamaralabs.com</b> (please check spam, if not found in inbox) regarding the session details.
+            </div>
+            <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
                 <label className="block text-sm font-medium">Email (optional)</label>
                 <input
@@ -293,7 +296,7 @@ export default function BuyPage() {
                                       : "border-[var(--foreground)]/20 hover:border-[var(--foreground)]/40")
                                   }
                                 >
-              {ts} IST
+                                  {ts} IST
                                 </button>
                               );
                             })}
@@ -321,6 +324,9 @@ export default function BuyPage() {
           </div>
         </div>
       )}
-    </section>
+    <div className="mt-10 text-center text-sm text-[var(--foreground)]/70">
+      Need help? Contact support at <a href="tel:+919989875423" className="underline">+91 9989875423</a> or <a href="mailto:support@hamaralabs.com" className="underline">support@hamaralabs.com</a>
+    </div>
+  </section>
   );
 }

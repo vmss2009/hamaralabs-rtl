@@ -350,14 +350,19 @@ export default function PaymentsReturnPage() {
         </div>
 
         {status === "success" && receiptData && (
-          <div className="mt-6 flex gap-3 no-print">
-            <button
-              onClick={downloadReceiptPDF}
-              className="flex-1 rounded-2xl border border-[var(--foreground)]/15 bg-[var(--background)] px-4 py-2 font-medium text-[var(--foreground)]/90 hover:bg-[var(--foreground)]/10"
-            >
-              Download receipt
-            </button>
-          </div>
+          <>
+            <div className="mt-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800">
+              You will get phoned from <b>+91 9989875423</b> for confirmation, and an email from <b>support@hamaralabs.com</b> (please check spam, if not found in inbox) will be sent  regarding the session details.
+            </div>
+            <div className="mt-6 flex gap-3 no-print">
+              <button
+                onClick={downloadReceiptPDF}
+                className="flex-1 rounded-2xl border border-[var(--foreground)]/15 bg-[var(--background)] px-4 py-2 font-medium text-[var(--foreground)]/90 hover:bg-[var(--foreground)]/10"
+              >
+                Download receipt
+              </button>
+            </div>
+          </>
         )}
       </div>
 
