@@ -126,6 +126,7 @@ export default function BuyPage() {
 
   return (
     <section className="py-10">
+      <div className="mb-8 text-4xl font-bold text-center text-[var(--foreground)]">Hands-on activity</div>
       <div className="mx-auto max-w-2xl rounded-3xl border border-[var(--foreground)]/10 bg-[var(--background)] p-6 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="grid size-11 place-items-center rounded-2xl bg-[var(--foreground)]/10">
@@ -218,7 +219,7 @@ export default function BuyPage() {
 
       {open && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-[var(--foreground)]/10 bg-[var(--background)] p-6 shadow-xl">
+          <div className="w-full max-w-lg rounded-3xl border border-[var(--foreground)]/10 bg-[var(--background)] p-6 shadow-xl max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Contact details</h2>
               <button
@@ -230,7 +231,9 @@ export default function BuyPage() {
             </div>
 
             <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800">
-              After successful payment, you will immediately get phoned from <b>+91 9989875423</b> for confirmation, and an email will be sent from <b>support@hamaralabs.com</b> (please check spam, if not found in inbox) regarding the session details.
+              A 15-minute slot will be booked based on your selected hours.
+              <br/>
+              After successful payment, you will get an email from <b>support@hamaralabs.com</b> (please check spam, if not found in inbox) regarding the session details.
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
@@ -325,7 +328,7 @@ export default function BuyPage() {
         </div>
       )}
     <div className="mt-10 text-center text-sm text-[var(--foreground)]/70">
-      Need help? Contact support at <a href="tel:+919989875423" className="underline">+91 9989875423</a> or <a href="mailto:support@hamaralabs.com" className="underline">support@hamaralabs.com</a>
+      Need help? Contact support at <a href="mailto:support@hamaralabs.com" className="underline">support@hamaralabs.com</a>
     </div>
   </section>
   );

@@ -352,7 +352,7 @@ export default function PaymentsReturnPage() {
         {status === "success" && receiptData && (
           <>
             <div className="mt-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800">
-              You will get phoned from <b>+91 9989875423</b> for confirmation, and an email from <b>support@hamaralabs.com</b> (please check spam, if not found in inbox) will be sent  regarding the session details.
+              You will get an email from <b>support@hamaralabs.com</b> (please check spam, if not found in inbox) regarding the session details. Thanks for your payment!
             </div>
             <div className="mt-6 flex gap-3 no-print">
               <button
