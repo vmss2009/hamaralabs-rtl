@@ -410,12 +410,12 @@ export default function PaymentsReturnPage() {
     status === "success" || status === "selecting-slot" || status === "booking";
 
   // Dates with no time slots at all just take up space in the picker — drop
-  // them, and show the newest date first.
+  // them. Soonest date first, so scrolling right moves further into the future.
   const visibleSchedules = useMemo(
     () =>
       schedules
         .filter((sch) => sch.timeSlots.length > 0)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
     [schedules]
   );
 
@@ -440,7 +440,7 @@ export default function PaymentsReturnPage() {
 
   return (
     <section className="grid place-items-center py-16">
-      <div className="w-full max-w-md rounded-3xl border border-[var(--foreground)]/10 bg-[var(--background)] p-8 shadow-sm">
+      <div className="w-full min-w-0 max-w-md rounded-3xl border border-[var(--foreground)]/10 bg-[var(--background)] p-8 shadow-sm">
         <div className="flex items-center gap-3">
           <div
             className={[
@@ -513,11 +513,11 @@ export default function PaymentsReturnPage() {
                 <div className="text-sm text-[var(--foreground)]/70">No slots available.</div>
               )}
 
-              <div className="relative">
+              <div className="relative -mx-1">
                 <div
                   ref={scheduleScrollRef}
                   onScroll={updateScheduleScrollState}
-                  className="flex gap-4 overflow-x-auto scroll-smooth pb-2"
+                  className="flex gap-3 overflow-x-auto scroll-smooth snap-x snap-mandatory px-1 pb-2 sm:gap-4 [-webkit-overflow-scrolling:touch]"
                 >
                   {visibleSchedules.map((sch) => {
                     const dateLabel = new Date(sch.date).toLocaleDateString(undefined, {
@@ -527,7 +527,7 @@ export default function PaymentsReturnPage() {
                       day: "numeric",
                     });
                     return (
-                      <div key={sch.id} className="flex-none w-40">
+                      <div key={sch.id} className="flex-none w-32 snap-start sm:w-40">
                         <div className="text-sm font-medium mb-2 whitespace-nowrap">{dateLabel}</div>
                         <div className="flex flex-col gap-2">
                           {sch.timeSlots.map((ts) => {
@@ -561,35 +561,29 @@ export default function PaymentsReturnPage() {
                 </div>
 
                 {canScrollLeft && (
-                  <>
-                    <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[var(--background)] to-transparent" />
-                    <button
-                      type="button"
-                      aria-label="Scroll to earlier dates"
-                      onClick={() => scheduleScrollRef.current?.scrollBy({ left: -168, behavior: "smooth" })}
-                      className="absolute left-0.5 top-3 grid size-6 place-items-center rounded-full border border-[var(--foreground)]/15 bg-[var(--background)] text-[var(--foreground)]/70 shadow-sm hover:bg-[var(--foreground)]/10"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" className="size-3.5">
-                        <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    aria-label="Scroll to earlier dates"
+                    onClick={() => scheduleScrollRef.current?.scrollBy({ left: -150, behavior: "smooth" })}
+                    className="absolute inset-y-0 left-0 flex w-9 items-center justify-center rounded-l-2xl bg-[var(--foreground)]/10 text-[var(--foreground)] backdrop-blur-[1px] transition hover:bg-[var(--foreground)]/20 active:bg-[var(--foreground)]/25 sm:w-10"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-4">
+                      <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
                 )}
 
                 {canScrollRight && (
-                  <>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--background)] to-transparent" />
-                    <button
-                      type="button"
-                      aria-label="Scroll to later dates"
-                      onClick={() => scheduleScrollRef.current?.scrollBy({ left: 168, behavior: "smooth" })}
-                      className="absolute right-0.5 top-3 grid size-6 place-items-center rounded-full border border-[var(--foreground)]/15 bg-[var(--background)] text-[var(--foreground)]/70 shadow-sm hover:bg-[var(--foreground)]/10 animate-pulse"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" className="size-3.5">
-                        <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    aria-label="Scroll to later dates"
+                    onClick={() => scheduleScrollRef.current?.scrollBy({ left: 150, behavior: "smooth" })}
+                    className="absolute inset-y-0 right-0 flex w-9 items-center justify-center rounded-r-2xl bg-[var(--foreground)]/10 text-[var(--foreground)] backdrop-blur-[1px] transition hover:bg-[var(--foreground)]/20 active:bg-[var(--foreground)]/25 sm:w-10"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" className="size-4">
+                      <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
                 )}
               </div>
             </div>
@@ -690,7 +684,7 @@ export default function PaymentsReturnPage() {
       </div>
 
       {status === "success" && receiptData && (
-        <div className="mt-8 w-full max-w-3xl mx-auto">
+        <div className="mt-8 w-full min-w-0 max-w-3xl mx-auto">
           <div
             ref={receiptRef}
             className="rounded-3xl border border-slate-200 bg-white text-slate-800 shadow-lg ring-1 ring-slate-900/5"
