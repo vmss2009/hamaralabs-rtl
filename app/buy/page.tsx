@@ -1,36 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 export default function BuyPage() {
   const AMOUNT = process.env.NEXT_PUBLIC_AMOUNT || 50;
 
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("+91 ");
+  const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [schedules, setSchedules] = useState<
-    Array<{
-      id: string;
-      userId: string;
-      date: string; // ISO date
-      timeSlots: Array<{
-        id: string;
-        startTime: string; // "HH:MM"
-        endTime: string; // "HH:MM"
-        maxSlots: number;
-        bookedSlots: number;
-      }>;
-      createdAt?: string;
-      updatedAt?: string;
-    }>
-  >([]);
-  const [slotsLoading, setSlotsLoading] = useState(false);
-  const [slotsError, setSlotsError] = useState<string | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<{
-    date: string; // ISO date
-    time: string; // "HH:mm-HH:mm"
-  } | null>(null);
 
   const paymentPortal = process.env.NEXT_PUBLIC_PAYMENT_PORTAL || "https://hamaralabs.com";
   const merchantId = "${merchantId}";
@@ -42,50 +20,10 @@ export default function BuyPage() {
 
   const onBuyClick = () => setOpen(true);
 
-  // Fetch schedules when the popup opens
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    const load = async () => {
-      setSlotsLoading(true);
-      setSlotsError(null);
-      try {
-        const res = await fetch(
-          `https://calendar.hamaralabs.com/api/schedules/public/${process.env.NEXT_PUBLIC_CALENDAR_USER || "mohan487"}?leadMinutes=1`,
-          { cache: "no-store" }
-        );
-        if (!res.ok) throw new Error(`Failed to load slots (${res.status})`);
-        const data = await res.json();
-        if (cancelled) return;
-        if (Array.isArray(data)) {
-          setSchedules(data);
-        } else {
-          setSchedules([]);
-        }
-      } catch (e: any) {
-        if (!cancelled) setSlotsError(e?.message || "Failed to load slots");
-      } finally {
-        if (!cancelled) setSlotsLoading(false);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) {
       alert("Email is required.");
-      return;
-    }
-    if (!phone.trim()) {
-      alert("Phone number is required.");
-      return;
-    }
-    if (!selectedSlot) {
-      alert("Please select a slot.");
       return;
     }
     if (!merchantId) {
@@ -109,7 +47,6 @@ export default function BuyPage() {
           docId,
           merchantId,
           merchantTransactionId,
-      selectedSlot,
         })
       );
     }
@@ -120,9 +57,7 @@ export default function BuyPage() {
       `&merchantTransactionId=${encodeURIComponent(merchantTransactionId)}` +
       `&merchantId=${merchantId}` +
       `&email=${encodeURIComponent(email)}` +
-    `&phone=${encodeURIComponent(phone)}` +
-    `&slotDate=${encodeURIComponent(selectedSlot.date)}` +
-    `&slotTime=${encodeURIComponent(selectedSlot.time)}`;
+      `&phone=${encodeURIComponent(phone)}`;
 
     const checkoutUrl =
       `${paymentPortal}/payment/checkout` +
@@ -241,9 +176,9 @@ export default function BuyPage() {
             </div>
 
             <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800">
-              A 15-minute slot will be booked based on your selected hours.
+              Pay ₹{AMOUNT} to continue — you&apos;ll pick your 15-minute slot right after payment.
               <br/>
-              After successful payment, you will get an email from <b>support@hamaralabs.com</b> (please check spam, if not found in inbox) regarding the session details.
+              After booking, you will get an email from <b>support@hamaralabs.com</b> (please check spam, if not found in inbox) regarding the session details.
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
@@ -259,82 +194,19 @@ export default function BuyPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium">Phone number *</label>
+                <label className="block text-sm font-medium">Contact number</label>
                 <input
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Phone number"
-                  required
+                  placeholder="Contact number (optional)"
                   className="mt-1 w-full rounded-2xl border border-[var(--foreground)]/15 bg-[var(--background)] px-3 py-2 outline-none focus:border-[var(--foreground)]/30"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium">Select a slot *</label>
-                <div className="mt-2 rounded-2xl border border-[var(--foreground)]/15 p-3">
-                  {slotsLoading && (
-                    <div className="text-sm text-[var(--foreground)]/70">Loading slots…</div>
-                  )}
-                  {slotsError && (
-                    <div className="text-sm text-red-600">{slotsError}</div>
-                  )}
-                  {!slotsLoading && !slotsError && schedules.length === 0 && (
-                    <div className="text-sm text-[var(--foreground)]/70">No slots available.</div>
-                  )}
-
-                  <div className="space-y-4">
-                    {schedules.map((sch) => {
-                      const dateLabel = new Date(sch.date).toLocaleDateString(undefined, {
-                        weekday: "short",
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      });
-                      return (
-                        <div key={sch.id} className="">
-                          <div className="text-sm font-medium mb-2">{dateLabel}</div>
-                          <div className="flex flex-wrap gap-2">
-            {sch.timeSlots.map((ts) => {
-                              const label = `${ts.startTime}-${ts.endTime}`;
-                              const isFull = ts.bookedSlots >= ts.maxSlots;
-                              const isSelected =
-                                selectedSlot?.date === sch.date && selectedSlot?.time === label;
-                              return (
-                                <button
-                                  key={ts.id}
-                                  type="button"
-                                  disabled={isFull}
-                                  onClick={() => setSelectedSlot({ date: sch.date, time: label })}
-                                  className={
-                                    `rounded-xl border px-3 py-1.5 text-sm transition ` +
-                                    (isFull
-                                      ? "border-[var(--foreground)]/10 text-[var(--foreground)]/30 cursor-not-allowed"
-                                      : isSelected
-                                      ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)]"
-                                      : "border-[var(--foreground)]/20 hover:border-[var(--foreground)]/40")
-                                  }
-                                >
-                                  {label} IST
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-        {selectedSlot && (
-                  <div className="mt-2 text-xs text-[var(--foreground)]/70">
-          Selected: {new Date(selectedSlot.date).toLocaleDateString()} — {selectedSlot.time} IST
-                  </div>
-                )}
-              </div>
-
               <button
                 type="submit"
-                disabled={submitting || !selectedSlot}
+                disabled={submitting}
                 className="w-full rounded-2xl bg-[var(--foreground)] px-5 py-3 text-[var(--background)] font-medium shadow-sm transition hover:opacity-90 disabled:opacity-60"
               >
                 {submitting ? "Redirecting…" : "Continue to payment"}

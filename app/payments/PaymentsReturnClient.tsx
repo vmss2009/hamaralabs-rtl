@@ -7,7 +7,13 @@ import Link from "next/link";
 import * as htmlToImage from "html-to-image";
 import jsPDF from "jspdf";
 
-type Status = "idle" | "checking" | "success" | "failed";
+type Status =
+  | "idle"
+  | "checking"
+  | "selecting-slot"
+  | "booking"
+  | "success"
+  | "failed";
 
 type Item = {
   description: string;
@@ -24,6 +30,17 @@ type ReceiptData = {
   items: Item[];
   amount: number;
   notes?: string;
+};
+
+type BackendBooking = {
+  slotId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+};
+
+type BackendSlot = {
+  id: string;
 };
 
 export default function PaymentsReturnPage() {
@@ -46,7 +63,35 @@ export default function PaymentsReturnPage() {
 
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
-  const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null);
+
+  const [slotId, setSlotId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<string | undefined>(
+    undefined
+  );
+
+  const [schedules, setSchedules] = useState<
+    Array<{
+      id: string;
+      userId: string;
+      date: string; // ISO date
+      timeSlots: Array<{
+        id: string;
+        startTime: string; // "HH:MM"
+        endTime: string; // "HH:MM"
+        maxSlots: number;
+        bookedSlots: number;
+      }>;
+      createdAt?: string;
+      updatedAt?: string;
+    }>
+  >([]);
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [schedulesError, setSchedulesError] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<{
+    date: string; // ISO date
+    time: string; // "HH:mm-HH:mm"
+  } | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   useEffect(() => {
     const fromQuery = {
@@ -72,11 +117,59 @@ export default function PaymentsReturnPage() {
     setMerchantTransactionId(
       fromQuery.merchantTransactionId ?? fromSession.merchantTransactionId ?? ""
     );
-
-    if (fromSession.selectedSlot) {
-      setSelectedSlot(fromSession.selectedSlot);
-    }
   }, [qp]);
+
+  // Looks up the payment record for a merchantTransactionId, so the slot the
+  // user picks has something to attach to.
+  const fetchSlotByTransaction = async (
+    mtx: string
+  ): Promise<BackendSlot | null> => {
+    const res = await fetch(
+      `/api/slots?merchantTransactionId=${encodeURIComponent(mtx)}`,
+      { cache: "no-store" }
+    );
+    const data = await res.json().catch(() => ({}));
+    return data?.slot ?? null;
+  };
+
+  // All bookings tied to this email, regardless of which slot/transaction
+  // they came from. Used to work out whether a given slot already has a
+  // booking attached (the slots API doesn't support filtering server-side).
+  const fetchBookingsByEmail = async (
+    mail: string
+  ): Promise<BackendBooking[]> => {
+    const res = await fetch(
+      `/api/bookings/by-email?email=${encodeURIComponent(mail)}`,
+      { cache: "no-store" }
+    );
+    const data = await res.json().catch(() => ({}));
+    return Array.isArray(data?.bookings) ? data.bookings : [];
+  };
+
+  const showBookedReceipt = (
+    booking: BackendBooking,
+    paymentMethodValue: string | undefined
+  ) => {
+    setStatus("success");
+    setMessage("Payment successful! Your slot is booked.");
+    const now = new Date();
+    setReceiptData({
+      date: now.toLocaleString(),
+      merchantTransactionId,
+      paidBy: email || phone,
+      paymentMethod: paymentMethodValue,
+      items: [
+        {
+          description: `Remote Lab Booking (${booking.date} ${booking.startTime}-${booking.endTime})`,
+          quantity: 1,
+          price: Number(amount),
+          total: Number(amount),
+        },
+      ],
+      amount: Number(amount),
+      notes: "Thank you for your payment.",
+    });
+  };
 
   useEffect(() => {
     const verify = async () => {
@@ -84,7 +177,7 @@ export default function PaymentsReturnPage() {
       if (!amount) missingKeys.push("amount");
       if (!merchantId) missingKeys.push("merchantId");
       if (!merchantTransactionId) missingKeys.push("merchantTransactionId");
-      if (!phone) missingKeys.push("phone");
+      if (!email) missingKeys.push("email");
 
       if (missingKeys.length) {
         setMissing(missingKeys);
@@ -103,16 +196,46 @@ export default function PaymentsReturnPage() {
         const json = await res.json();
         const code = json?.data?.code;
 
-        if (code === "PAYMENT_SUCCESS") {
-          // Prepare a single notes value to be used for both slot and booking
-          const unifiedNotes = `Booking for ${email || phone}`;
+        if (code !== "PAYMENT_SUCCESS") {
+          setStatus("failed");
+          setMessage("Payment failed or was cancelled.");
+          return;
+        }
 
-          // 1) Create Slot on backend
-          const slotPayload = {
+        setPaymentMethod(json?.data?.paymentMethod);
+
+        // The slots API can't be filtered server-side, so the "already
+        // booked" check is done by hand: fetch every booking for this email,
+        // find the payment record (slot) for this transaction, then see
+        // whether any booking's slotId matches that slot's id.
+        const bookings = await fetchBookingsByEmail(email);
+        const existingSlot = await fetchSlotByTransaction(merchantTransactionId);
+        if (existingSlot?.id) {
+          const matchingBooking = bookings.find((b) => b.slotId === existingSlot.id);
+          if (matchingBooking) {
+            showBookedReceipt(matchingBooking, json?.data?.paymentMethod);
+            return;
+          }
+          setSlotId(existingSlot.id);
+          setStatus("selecting-slot");
+          setMessage("Payment successful! Please select your slot below.");
+          return;
+        }
+
+        // No payment record yet for this transaction — create one so the
+        // slot the user picks next has something to attach to.
+        const unifiedNotes = `Booking for ${email || phone}`;
+        const slotRes = await fetch("/api/slots", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
             merchantTransactionId,
             merchantId,
             email,
-            phone,
+            // Contact number is optional in the UI, but the backend requires
+            // a non-empty phone field — fall back to email when it's blank.
+            phone: phone || email,
             amount: Number(amount),
             status: "PAID",
             items: [
@@ -126,132 +249,42 @@ export default function PaymentsReturnPage() {
             paidBy: email || phone,
             paymentMethod: json?.data?.paymentMethod || undefined,
             notes: unifiedNotes,
-          } as any;
+          }),
+        });
 
-          const slotRes = await fetch("/api/slots", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify(slotPayload),
-          });
-          if (!slotRes.ok) {
-            // If slot already exists for this merchantTransactionId, treat as success and skip creating booking.
-            if (slotRes.status === 409) {
-              setStatus("success");
-              setMessage("Payment successful! Your slot was already processed.");
-              const now = new Date();
-              const timeSlot = selectedSlot?.time || "";
-              const dateIso = selectedSlot?.date || new Date().toISOString();
-              const date = dateIso.split("T")[0];
-              setReceiptData({
-                date: now.toLocaleString(),
-                merchantTransactionId,
-                paidBy: email || phone,
-                paymentMethod: json?.data?.paymentMethod,
-                items: [
-                  {
-                    description: `Remote Lab Booking (${date} ${timeSlot})`,
-                    quantity: 1,
-                    price: Number(amount),
-                    total: Number(amount),
-                  },
-                ],
-                amount: Number(amount),
-                notes: "Thank you for your payment.",
-              });
-              return; // Do not create booking again
-            }
-            const err = await slotRes.json().catch(() => ({}));
-            throw new Error(err?.message || `Failed to create slot (${slotRes.status})`);
+        if (slotRes.status === 409) {
+          // Created concurrently (e.g. duplicate tab) — trust the backend record.
+          const slot = await fetchSlotByTransaction(merchantTransactionId);
+          const matchingBooking = slot
+            ? bookings.find((b) => b.slotId === slot.id)
+            : undefined;
+          if (matchingBooking) {
+            showBookedReceipt(matchingBooking, json?.data?.paymentMethod);
+          } else if (slot?.id) {
+            setSlotId(slot.id);
+            setStatus("selecting-slot");
+            setMessage("Payment successful! Please select your slot below.");
+          } else {
+            setStatus("failed");
+            setMessage("Could not verify your slot. Please contact support.");
           }
-          const slotJson = await slotRes.json();
-          const slotId = slotJson?.slot?.id || slotJson?.id || slotJson?.slotId;
-          if (!slotId) {
-            // If backend signals already exists in body, treat as success and skip booking
-            const alreadyExists =
-              String(slotJson?.message || "").toLowerCase().includes("exist") ||
-              slotJson?.alreadyExists === true;
-            if (alreadyExists) {
-              setStatus("success");
-              setMessage("Payment successful! Your slot was already processed.");
-              const now = new Date();
-              const timeSlot = selectedSlot?.time || "";
-              const dateIso = selectedSlot?.date || new Date().toISOString();
-              const date = dateIso.split("T")[0];
-              setReceiptData({
-                date: now.toLocaleString(),
-                merchantTransactionId,
-                paidBy: email || phone,
-                paymentMethod: json?.data?.paymentMethod,
-                items: [
-                  {
-                    description: `Remote Lab Booking (${date} ${timeSlot})`,
-                    quantity: 1,
-                    price: Number(amount),
-                    total: Number(amount),
-                  },
-                ],
-                amount: Number(amount),
-                notes: "Thank you for your payment.",
-              });
-              return; // Do not create booking again
-            }
-            throw new Error("Slot creation succeeded but no slotId returned.");
-          }
-
-          // 2) Create Booking that attaches to the Slot
-          const username = process.env.NEXT_PUBLIC_CALENDAR_USER || "mohan487"; // backend’s public username you shared
-          const dateIso = selectedSlot?.date || new Date().toISOString();
-          const date = dateIso.split("T")[0];
-          const timeSlot = selectedSlot?.time || "";
-          if (!timeSlot) throw new Error("Missing selected time slot.");
-          const [startTime, endTime] = timeSlot.split("-");
-          if (!startTime || !endTime) throw new Error("Invalid selected time slot.");
-
-          const bookingRes = await fetch("/api/bookings", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              username,
-              date,
-              startTime,
-              endTime,
-              guestName: email || "",
-              guestEmail: phone || "",
-              contactEmail: email || "",
-              notes: unifiedNotes,
-              slotId,
-            }),
-          });
-          if (!bookingRes.ok) {
-            const err = await bookingRes.json().catch(() => ({}));
-            throw new Error(err?.message || `Failed to create booking (${bookingRes.status})`);
-          }
-
-          setStatus("success");
-          setMessage("Payment successful! Your slot is booked.");
-
-          const now = new Date();
-          setReceiptData({
-            date: now.toLocaleString(),
-            merchantTransactionId,
-            paidBy: email || phone,
-            paymentMethod: json?.data?.paymentMethod,
-            items: [
-              {
-                description: `Remote Lab Booking (${date} ${timeSlot})`,
-                quantity: 1,
-                price: Number(amount),
-                total: Number(amount),
-              },
-            ],
-            amount: Number(amount),
-            notes: "Thank you for your payment.",
-          });
-        } else {
-          setStatus("failed");
-          setMessage("Payment failed or was cancelled.");
+          return;
         }
+
+        if (!slotRes.ok) {
+          const err = await slotRes.json().catch(() => ({}));
+          throw new Error(err?.message || `Failed to create slot (${slotRes.status})`);
+        }
+
+        const slotJson = await slotRes.json();
+        const newSlotId = slotJson?.slot?.id || slotJson?.id || slotJson?.slotId;
+        if (!newSlotId) {
+          throw new Error("Slot creation succeeded but no slotId returned.");
+        }
+
+        setSlotId(newSlotId);
+        setStatus("selecting-slot");
+        setMessage("Payment successful! Please select your slot below.");
       } catch (e: any) {
         setStatus("failed");
         setMessage(e?.message || "Could not verify payment.");
@@ -260,6 +293,74 @@ export default function PaymentsReturnPage() {
 
     if (amount !== null) verify();
   }, [amount, merchantId, merchantTransactionId, phone, docId, email]);
+
+  // Fetch schedules once payment is verified and it's time to pick a slot.
+  useEffect(() => {
+    if (status !== "selecting-slot") return;
+    let cancelled = false;
+    const load = async () => {
+      setSchedulesLoading(true);
+      setSchedulesError(null);
+      try {
+        const res = await fetch(
+          `https://calendar.hamaralabs.com/api/schedules/public/${process.env.NEXT_PUBLIC_CALENDAR_USER || "mohan487"}?leadMinutes=1`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) throw new Error(`Failed to load slots (${res.status})`);
+        const data = await res.json();
+        if (cancelled) return;
+        setSchedules(Array.isArray(data) ? data : []);
+      } catch (e: any) {
+        if (!cancelled) setSchedulesError(e?.message || "Failed to load slots");
+      } finally {
+        if (!cancelled) setSchedulesLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [status]);
+
+  const handleConfirmSlot = async () => {
+    if (!selectedSlot || !slotId) return;
+    setStatus("booking");
+    setBookingError(null);
+    try {
+      const username = process.env.NEXT_PUBLIC_CALENDAR_USER || "mohan487";
+      const date = selectedSlot.date.split("T")[0];
+      const [startTime, endTime] = selectedSlot.time.split("-");
+      if (!startTime || !endTime) throw new Error("Invalid selected time slot.");
+
+      const bookingRes = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          date,
+          startTime,
+          endTime,
+          guestName: email || "",
+          // Contact number is optional in the UI; fall back to email so the
+          // backend's required guestEmail field is never sent empty.
+          guestEmail: phone || email,
+          contactEmail: email || "",
+          notes: `Booking for ${email || phone}`,
+          slotId,
+        }),
+      });
+
+      if (!bookingRes.ok) {
+        const err = await bookingRes.json().catch(() => ({}));
+        throw new Error(err?.message || `Failed to create booking (${bookingRes.status})`);
+      }
+
+      showBookedReceipt({ slotId, date, startTime, endTime }, paymentMethod);
+    } catch (e: any) {
+      setStatus("selecting-slot");
+      setBookingError(e?.message || "Could not confirm your slot. Please try again.");
+    }
+  };
 
   const downloadReceiptPDF = async () => {
     if (!receiptRef.current) return;
@@ -284,6 +385,12 @@ export default function PaymentsReturnPage() {
       pdf.save(`receipt_${merchantTransactionId}.pdf`);
   };
 
+  // Payment already succeeded once we're selecting a slot or booking it, so
+  // the header icon should read as success from that point on — only an
+  // actual payment failure should show the failure icon.
+  const paymentConfirmed =
+    status === "success" || status === "selecting-slot" || status === "booking";
+
   return (
     <section className="grid place-items-center py-16">
       <div className="w-full max-w-md rounded-3xl border border-[var(--foreground)]/10 bg-[var(--background)] p-8 shadow-sm">
@@ -291,14 +398,14 @@ export default function PaymentsReturnPage() {
           <div
             className={[
               "grid size-10 place-items-center rounded-2xl",
-              status === "success"
+              paymentConfirmed
                 ? "bg-emerald-500/15 text-emerald-600"
                 : status === "failed"
                 ? "bg-rose-500/15 text-rose-600"
                 : "bg-[var(--foreground)]/10",
             ].join(" ")}
           >
-            {status === "success" ? (
+            {paymentConfirmed ? (
               <svg viewBox="0 0 24 24" fill="none" className="size-5">
                 <path
                   d="M5 12l4 4 10-10"
@@ -336,6 +443,85 @@ export default function PaymentsReturnPage() {
         {status === "failed" && missing.length > 0 && (
           <div className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800">
             Missing: {missing.join(", ")}
+          </div>
+        )}
+
+        {(status === "selecting-slot" || status === "booking") && (
+          <div className="mt-6">
+            {bookingError && (
+              <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                {bookingError}
+              </div>
+            )}
+
+            <label className="block text-sm font-medium">Select a slot *</label>
+            <div className="mt-2 rounded-2xl border border-[var(--foreground)]/15 p-3">
+              {schedulesLoading && (
+                <div className="text-sm text-[var(--foreground)]/70">Loading slots…</div>
+              )}
+              {schedulesError && (
+                <div className="text-sm text-red-600">{schedulesError}</div>
+              )}
+              {!schedulesLoading && !schedulesError && schedules.length === 0 && (
+                <div className="text-sm text-[var(--foreground)]/70">No slots available.</div>
+              )}
+
+              <div className="space-y-4">
+                {schedules.map((sch) => {
+                  const dateLabel = new Date(sch.date).toLocaleDateString(undefined, {
+                    weekday: "short",
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  });
+                  return (
+                    <div key={sch.id}>
+                      <div className="text-sm font-medium mb-2">{dateLabel}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {sch.timeSlots.map((ts) => {
+                          const label = `${ts.startTime}-${ts.endTime}`;
+                          const isFull = ts.bookedSlots >= ts.maxSlots;
+                          const isSelected =
+                            selectedSlot?.date === sch.date && selectedSlot?.time === label;
+                          return (
+                            <button
+                              key={ts.id}
+                              type="button"
+                              disabled={isFull || status === "booking"}
+                              onClick={() => setSelectedSlot({ date: sch.date, time: label })}
+                              className={
+                                `rounded-xl border px-3 py-1.5 text-sm transition ` +
+                                (isFull
+                                  ? "border-[var(--foreground)]/10 text-[var(--foreground)]/30 cursor-not-allowed"
+                                  : isSelected
+                                  ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)]"
+                                  : "border-[var(--foreground)]/20 hover:border-[var(--foreground)]/40")
+                              }
+                            >
+                              {label} IST
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {selectedSlot && (
+              <div className="mt-2 text-xs text-[var(--foreground)]/70">
+                Selected: {new Date(selectedSlot.date).toLocaleDateString()} — {selectedSlot.time} IST
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleConfirmSlot}
+              disabled={!selectedSlot || status === "booking"}
+              className="mt-4 w-full rounded-2xl bg-[var(--foreground)] px-5 py-3 text-[var(--background)] font-medium shadow-sm transition hover:opacity-90 disabled:opacity-60"
+            >
+              {status === "booking" ? "Booking…" : "Confirm booking"}
+            </button>
           </div>
         )}
 

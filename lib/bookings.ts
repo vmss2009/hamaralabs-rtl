@@ -1,5 +1,6 @@
 export type Booking = {
   id: string;
+  slotId: string;
   date: string;
   startTime: string;
   endTime: string;
