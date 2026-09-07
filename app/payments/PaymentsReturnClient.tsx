@@ -43,6 +43,23 @@ type BackendSlot = {
   id: string;
 };
 
+// The stored slot values stay in 24-hour "HH:MM" (needed by the booking
+// APIs) — these only affect what's displayed to the user.
+function formatTime12h(time: string): string {
+  const [hoursStr, minutes] = time.split(":");
+  const hours = Number(hoursStr);
+  if (Number.isNaN(hours) || !minutes) return time;
+  const period = hours >= 12 ? "PM" : "AM";
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hour12}:${minutes} ${period}`;
+}
+
+function formatTimeRange12h(range: string): string {
+  const [start, end] = range.split("-");
+  if (!start || !end) return range;
+  return `${formatTime12h(start)} - ${formatTime12h(end)}`;
+}
+
 export default function PaymentsReturnPage() {
   const params = useSearchParams();
   const router = useRouter();
@@ -92,6 +109,7 @@ export default function PaymentsReturnPage() {
     time: string; // "HH:mm-HH:mm"
   } | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   useEffect(() => {
     const fromQuery = {
@@ -391,6 +409,35 @@ export default function PaymentsReturnPage() {
   const paymentConfirmed =
     status === "success" || status === "selecting-slot" || status === "booking";
 
+  // Dates with no time slots at all just take up space in the picker — drop
+  // them, and show the newest date first.
+  const visibleSchedules = useMemo(
+    () =>
+      schedules
+        .filter((sch) => sch.timeSlots.length > 0)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [schedules]
+  );
+
+  // Tracks whether the date row has more content off-screen in either
+  // direction, so we can show a scroll cue instead of leaving it undiscoverable.
+  const scheduleScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScheduleScrollState = () => {
+    const el = scheduleScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  useEffect(() => {
+    updateScheduleScrollState();
+    window.addEventListener("resize", updateScheduleScrollState);
+    return () => window.removeEventListener("resize", updateScheduleScrollState);
+  }, [visibleSchedules]);
+
   return (
     <section className="grid place-items-center py-16">
       <div className="w-full max-w-md rounded-3xl border border-[var(--foreground)]/10 bg-[var(--background)] p-8 shadow-sm">
@@ -462,66 +509,148 @@ export default function PaymentsReturnPage() {
               {schedulesError && (
                 <div className="text-sm text-red-600">{schedulesError}</div>
               )}
-              {!schedulesLoading && !schedulesError && schedules.length === 0 && (
+              {!schedulesLoading && !schedulesError && visibleSchedules.length === 0 && (
                 <div className="text-sm text-[var(--foreground)]/70">No slots available.</div>
               )}
 
-              <div className="space-y-4">
-                {schedules.map((sch) => {
-                  const dateLabel = new Date(sch.date).toLocaleDateString(undefined, {
-                    weekday: "short",
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  });
-                  return (
-                    <div key={sch.id}>
-                      <div className="text-sm font-medium mb-2">{dateLabel}</div>
-                      <div className="flex flex-wrap gap-2">
-                        {sch.timeSlots.map((ts) => {
-                          const label = `${ts.startTime}-${ts.endTime}`;
-                          const isFull = ts.bookedSlots >= ts.maxSlots;
-                          const isSelected =
-                            selectedSlot?.date === sch.date && selectedSlot?.time === label;
-                          return (
-                            <button
-                              key={ts.id}
-                              type="button"
-                              disabled={isFull || status === "booking"}
-                              onClick={() => setSelectedSlot({ date: sch.date, time: label })}
-                              className={
-                                `rounded-xl border px-3 py-1.5 text-sm transition ` +
-                                (isFull
-                                  ? "border-[var(--foreground)]/10 text-[var(--foreground)]/30 cursor-not-allowed"
-                                  : isSelected
-                                  ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)]"
-                                  : "border-[var(--foreground)]/20 hover:border-[var(--foreground)]/40")
-                              }
-                            >
-                              {label} IST
-                            </button>
-                          );
-                        })}
+              <div className="relative">
+                <div
+                  ref={scheduleScrollRef}
+                  onScroll={updateScheduleScrollState}
+                  className="flex gap-4 overflow-x-auto scroll-smooth pb-2"
+                >
+                  {visibleSchedules.map((sch) => {
+                    const dateLabel = new Date(sch.date).toLocaleDateString(undefined, {
+                      weekday: "short",
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    });
+                    return (
+                      <div key={sch.id} className="flex-none w-40">
+                        <div className="text-sm font-medium mb-2 whitespace-nowrap">{dateLabel}</div>
+                        <div className="flex flex-col gap-2">
+                          {sch.timeSlots.map((ts) => {
+                            const label = `${ts.startTime}-${ts.endTime}`;
+                            const isFull = ts.bookedSlots >= ts.maxSlots;
+                            const isSelected =
+                              selectedSlot?.date === sch.date && selectedSlot?.time === label;
+                            return (
+                              <button
+                                key={ts.id}
+                                type="button"
+                                disabled={isFull || status === "booking"}
+                                onClick={() => setSelectedSlot({ date: sch.date, time: label })}
+                                className={
+                                  `rounded-xl border px-3 py-1.5 text-sm transition ` +
+                                  (isFull
+                                    ? "border-[var(--foreground)]/10 text-[var(--foreground)]/30 cursor-not-allowed"
+                                    : isSelected
+                                    ? "border-[var(--foreground)] bg-[var(--foreground)] text-[var(--background)]"
+                                    : "border-[var(--foreground)]/20 hover:border-[var(--foreground)]/40")
+                                }
+                              >
+                                {formatTimeRange12h(label)}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+
+                {canScrollLeft && (
+                  <>
+                    <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-[var(--background)] to-transparent" />
+                    <button
+                      type="button"
+                      aria-label="Scroll to earlier dates"
+                      onClick={() => scheduleScrollRef.current?.scrollBy({ left: -168, behavior: "smooth" })}
+                      className="absolute left-0.5 top-3 grid size-6 place-items-center rounded-full border border-[var(--foreground)]/15 bg-[var(--background)] text-[var(--foreground)]/70 shadow-sm hover:bg-[var(--foreground)]/10"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" className="size-3.5">
+                        <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </>
+                )}
+
+                {canScrollRight && (
+                  <>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--background)] to-transparent" />
+                    <button
+                      type="button"
+                      aria-label="Scroll to later dates"
+                      onClick={() => scheduleScrollRef.current?.scrollBy({ left: 168, behavior: "smooth" })}
+                      className="absolute right-0.5 top-3 grid size-6 place-items-center rounded-full border border-[var(--foreground)]/15 bg-[var(--background)] text-[var(--foreground)]/70 shadow-sm hover:bg-[var(--foreground)]/10 animate-pulse"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" className="size-3.5">
+                        <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
             {selectedSlot && (
               <div className="mt-2 text-xs text-[var(--foreground)]/70">
-                Selected: {new Date(selectedSlot.date).toLocaleDateString()} — {selectedSlot.time} IST
+                Selected: {new Date(selectedSlot.date).toLocaleDateString()} — {formatTimeRange12h(selectedSlot.time)}
               </div>
             )}
 
             <button
               type="button"
-              onClick={handleConfirmSlot}
+              onClick={() => setShowConfirmDialog(true)}
               disabled={!selectedSlot || status === "booking"}
               className="mt-4 w-full rounded-2xl bg-[var(--foreground)] px-5 py-3 text-[var(--background)] font-medium shadow-sm transition hover:opacity-90 disabled:opacity-60"
             >
               {status === "booking" ? "Booking…" : "Confirm booking"}
             </button>
+          </div>
+        )}
+
+        {showConfirmDialog && selectedSlot && (
+          <div className="fixed inset-0 z-[60] grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-3xl border border-[var(--foreground)]/10 bg-[var(--background)] p-6 shadow-xl">
+              <h2 className="text-lg font-semibold">Confirm your slot</h2>
+              <p className="mt-2 text-sm text-[var(--foreground)]/70">You&apos;re about to book:</p>
+              <div className="mt-3 rounded-2xl border border-[var(--foreground)]/15 p-3">
+                <div className="font-medium">
+                  {new Date(selectedSlot.date).toLocaleDateString(undefined, {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </div>
+                <div className="mt-1 text-sm text-[var(--foreground)]/70">
+                  {formatTimeRange12h(selectedSlot.time)}
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-[var(--foreground)]/60">
+                This slot will be reserved as soon as you confirm.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmDialog(false)}
+                  className="flex-1 rounded-2xl border border-[var(--foreground)]/15 bg-[var(--background)] px-4 py-2 font-medium text-[var(--foreground)]/80 hover:bg-[var(--foreground)]/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowConfirmDialog(false);
+                    handleConfirmSlot();
+                  }}
+                  className="flex-1 rounded-2xl bg-[var(--foreground)] px-4 py-2 font-medium text-[var(--background)] hover:opacity-90"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
